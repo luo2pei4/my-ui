@@ -1,0 +1,1 @@
+从gio-example的component子功能里面抽出左边目录的实例。点击app bar上的按钮可以抽出和隐藏左边目录。
