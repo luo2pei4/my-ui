@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"image"
 	"image/color"
 	"log"
 	"os"
@@ -8,6 +10,8 @@ import (
 	"gioui.org/app"
 	"gioui.org/layout"
 	"gioui.org/op"
+	"gioui.org/op/clip"
+	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -19,7 +23,10 @@ type Page struct {
 	passwordInput widget.Editor
 	cmdInput      widget.Editor
 	execButton    widget.Clickable
+	modalButton   widget.Clickable
 	theme         *material.Theme
+	showDialog    bool
+	confirmMsg    string
 }
 
 func NewPage() *Page {
@@ -33,10 +40,11 @@ func NewPage() *Page {
 }
 
 func (p *Page) Layout(gtx layout.Context) layout.Dimensions {
-	return layout.Flex{
+	mainPage := layout.Flex{
 		Axis:      layout.Vertical,
 		Alignment: layout.Middle,
-	}.Layout(gtx,
+	}
+	mainPage.Layout(gtx,
 		layout.Rigid(
 			func(gtx layout.Context) layout.Dimensions {
 				return layout.UniformInset(unit.Dp(10)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -131,9 +139,79 @@ func (p *Page) Layout(gtx layout.Context) layout.Dimensions {
 			})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			// 点击按钮逻辑
+			if p.execButton.Clicked(gtx) {
+				p.checkInput()
+			}
 			return Button(gtx, 80, p.theme, &p.execButton, "execute")
 		}),
 	)
+
+	// 弹出对话框
+	if p.showDialog {
+		p.drawConfirmDialog(gtx)
+	}
+
+	return mainPage.Layout(gtx)
+}
+
+func (p *Page) checkInput() {
+	itemName := ""
+	switch {
+	case p.remoteIpInput.Text() == "":
+		itemName = "ip address"
+	case p.usernameInput.Text() == "":
+		itemName = "login user name"
+	case p.passwordInput.Text() == "":
+		itemName = "login user password"
+	case p.cmdInput.Text() == "":
+		itemName = "command"
+	}
+	if len(itemName) != 0 {
+		p.confirmMsg = fmt.Sprintf("%s is required", itemName)
+		p.showDialog = true
+	}
+}
+
+func (p *Page) drawConfirmDialog(gtx layout.Context) {
+	// 全屏
+	full := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
+	paint.Fill(gtx.Ops, color.NRGBA{A: 150})
+	full.Pop()
+
+	// 窗口大小和位置（居中）
+	boxW := min(gtx.Constraints.Max.X-80, 420)
+	boxH := 150
+	cx := gtx.Constraints.Max.X / 2
+	cy := gtx.Constraints.Max.Y / 2
+	rect := image.Rect(cx-boxW/2, cy-boxH/2, cx+boxW/2, cy+boxH/2)
+
+	// 窗口背景（白色矩形）
+	box := clip.Rect{Min: rect.Min, Max: rect.Max}.Push(gtx.Ops)
+	paint.Fill(gtx.Ops, color.NRGBA{R: 255, G: 255, B: 255, A: 255})
+	box.Pop()
+
+	// 将坐标系偏移道对话框左上角，然后在内部做正常布局
+	offset := op.Offset(image.Pt(rect.Min.X, rect.Min.Y)).Push(gtx.Ops)
+	inner := gtx
+	inner.Constraints.Min = image.Pt(boxW, 0)
+	inner.Constraints.Max = image.Pt(boxW, boxH)
+
+	layout.UniformInset(unit.Dp(16)).Layout(inner, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(material.Body1(p.theme, p.confirmMsg).Layout),
+			layout.Rigid(layout.Spacer{Height: unit.Dp(16)}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				btn := material.Button(p.theme, &p.modalButton, "confirm")
+				// 注意：Clicked() 无参
+				if p.modalButton.Clicked(gtx) {
+					p.showDialog = false
+				}
+				return btn.Layout(gtx)
+			}),
+		)
+	})
+	offset.Pop()
 }
 
 func loop(win *app.Window) error {
