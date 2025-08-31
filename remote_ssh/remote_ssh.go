@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"log"
 	"os"
+	"strings"
 
 	"gioui.org/app"
 	"gioui.org/layout"
@@ -15,6 +16,7 @@ import (
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
+	"golang.org/x/crypto/ssh"
 )
 
 type Page struct {
@@ -101,6 +103,7 @@ func (p *Page) Layout(gtx layout.Context) layout.Dimensions {
 								}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 									gtx.Constraints.Min.X = gtx.Dp(200)
 									gtx.Constraints.Max.X = gtx.Dp(200)
+									p.passwordInput.Mask = '*'
 									return material.Editor(p.theme, &p.passwordInput, "password").Layout(gtx)
 								})
 							})
@@ -142,6 +145,9 @@ func (p *Page) Layout(gtx layout.Context) layout.Dimensions {
 			// 点击按钮逻辑
 			if p.execButton.Clicked(gtx) {
 				p.checkInput()
+				if !p.showDialog {
+					p.executeCmd()
+				}
 			}
 			return Button(gtx, 80, p.theme, &p.execButton, "execute")
 		}),
@@ -245,4 +251,42 @@ func Button(gtx layout.Context, width unit.Dp, th *material.Theme, wid *widget.C
 	gtx.Constraints.Min.X = gtx.Dp(width)
 	gtx.Constraints.Max.X = gtx.Dp(width)
 	return material.Button(th, wid, txt).Layout(gtx)
+}
+
+func (p *Page) executeCmd() {
+
+	config := &ssh.ClientConfig{
+		User: p.usernameInput.Text(),
+		Auth: []ssh.AuthMethod{
+			ssh.Password(p.passwordInput.Text()),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+	host := p.remoteIpInput.Text()
+	if len(strings.Split(host, ":")) == 1 {
+		host += ":22"
+	}
+	conn, err := ssh.Dial("tcp", host, config)
+	if err != nil {
+		p.confirmMsg = fmt.Sprintf("dail %s failed, %v", host, err)
+		p.showDialog = true
+		return
+	}
+	defer conn.Close()
+	
+	session, err := conn.NewSession()
+	if err != nil {
+		p.confirmMsg = fmt.Sprintf("create session failed, %v", err)
+		p.showDialog = true
+		return
+	}
+	defer session.Close()
+
+	output, err := session.CombinedOutput(p.cmdInput.Text())
+	if err != nil {
+		p.confirmMsg = fmt.Sprintf("execute command failed, %v", err)
+		p.showDialog = true
+		return
+	}
+	fmt.Println(string(output))
 }
