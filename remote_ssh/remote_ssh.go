@@ -13,6 +13,7 @@ import (
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
+	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -29,6 +30,7 @@ type Page struct {
 	theme         *material.Theme
 	showDialog    bool
 	confirmMsg    string
+	resultEditor  widget.Editor
 }
 
 func NewPage() *Page {
@@ -38,6 +40,8 @@ func NewPage() *Page {
 	page.remoteIpInput.SingleLine = true
 	page.usernameInput.SingleLine = true
 	page.passwordInput.SingleLine = true
+	page.resultEditor.ReadOnly = true
+	page.resultEditor.WrapPolicy = text.WrapGraphemes
 	return page
 }
 
@@ -151,6 +155,14 @@ func (p *Page) Layout(gtx layout.Context) layout.Dimensions {
 			}
 			return Button(gtx, 80, p.theme, &p.execButton, "execute")
 		}),
+		// 结果显示区域（占满剩余空间）
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			if len(p.resultEditor.Text()) == 0 {
+				return layout.Dimensions{}
+			}
+			in := layout.UniformInset(unit.Dp(8))
+			return in.Layout(gtx, material.Editor(p.theme, &p.resultEditor, "result").Layout)
+		}),
 	)
 
 	// 弹出对话框
@@ -220,6 +232,44 @@ func (p *Page) drawConfirmDialog(gtx layout.Context) {
 	offset.Pop()
 }
 
+func (p *Page) executeCmd() {
+
+	config := &ssh.ClientConfig{
+		User: p.usernameInput.Text(),
+		Auth: []ssh.AuthMethod{
+			ssh.Password(p.passwordInput.Text()),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+	host := p.remoteIpInput.Text()
+	if len(strings.Split(host, ":")) == 1 {
+		host += ":22"
+	}
+	conn, err := ssh.Dial("tcp", host, config)
+	if err != nil {
+		p.confirmMsg = fmt.Sprintf("dail %s failed, %v", host, err)
+		p.showDialog = true
+		return
+	}
+	defer conn.Close()
+
+	session, err := conn.NewSession()
+	if err != nil {
+		p.confirmMsg = fmt.Sprintf("create session failed, %v", err)
+		p.showDialog = true
+		return
+	}
+	defer session.Close()
+
+	output, err := session.CombinedOutput(p.cmdInput.Text())
+	if err != nil {
+		p.confirmMsg = fmt.Sprintf("execute command failed, %v", err)
+		p.showDialog = true
+		return
+	}
+	p.resultEditor.SetText(string(output))
+}
+
 func loop(win *app.Window) error {
 	page := NewPage()
 	var ops op.Ops
@@ -251,42 +301,4 @@ func Button(gtx layout.Context, width unit.Dp, th *material.Theme, wid *widget.C
 	gtx.Constraints.Min.X = gtx.Dp(width)
 	gtx.Constraints.Max.X = gtx.Dp(width)
 	return material.Button(th, wid, txt).Layout(gtx)
-}
-
-func (p *Page) executeCmd() {
-
-	config := &ssh.ClientConfig{
-		User: p.usernameInput.Text(),
-		Auth: []ssh.AuthMethod{
-			ssh.Password(p.passwordInput.Text()),
-		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-	}
-	host := p.remoteIpInput.Text()
-	if len(strings.Split(host, ":")) == 1 {
-		host += ":22"
-	}
-	conn, err := ssh.Dial("tcp", host, config)
-	if err != nil {
-		p.confirmMsg = fmt.Sprintf("dail %s failed, %v", host, err)
-		p.showDialog = true
-		return
-	}
-	defer conn.Close()
-	
-	session, err := conn.NewSession()
-	if err != nil {
-		p.confirmMsg = fmt.Sprintf("create session failed, %v", err)
-		p.showDialog = true
-		return
-	}
-	defer session.Close()
-
-	output, err := session.CombinedOutput(p.cmdInput.Text())
-	if err != nil {
-		p.confirmMsg = fmt.Sprintf("execute command failed, %v", err)
-		p.showDialog = true
-		return
-	}
-	fmt.Println(string(output))
 }
