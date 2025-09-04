@@ -1,4 +1,4 @@
-package listdisks
+package disktable
 
 import (
 	"fmt"
@@ -50,6 +50,8 @@ func New(router *page.Router) *Page {
 
 var _ page.Page = &Page{}
 
+var headingText = []string{"No", "Name", "Type", "Size", "Serial", "Vendor", "Model"}
+
 func (p *Page) Actions() []component.AppBarAction {
 	return []component.AppBarAction{}
 }
@@ -60,7 +62,7 @@ func (p *Page) Overflow() []component.OverflowAction {
 
 func (p *Page) NavItem() component.NavItem {
 	return component.NavItem{
-		Name: "List Disks",
+		Name: "Disk table",
 		Icon: icon.RemoteIcon,
 	}
 }
@@ -150,7 +152,7 @@ func (p *Page) Layout(gtx layout.Context, th *material.Theme) layout.Dimensions 
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			in := layout.UniformInset(unit.Dp(8))
 			return in.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return p.drawTable(gtx, th)
+				return p.tableLayout(gtx, th, 1)
 			})
 		}),
 	)
@@ -270,98 +272,88 @@ func Button(gtx layout.Context, width unit.Dp, th *material.Theme, wid *widget.C
 	return material.Button(th, wid, txt).Layout(gtx)
 }
 
-// 绘制表格
-func (p *Page) drawTable(gtx layout.Context, th *material.Theme) layout.Dimensions {
+func (p *Page) tableLayout(gtx layout.Context, th *material.Theme, rows int) layout.Dimensions {
 
-	fx := layout.Flex{Axis: layout.Vertical}
-
-	// 设置表格样式
-	const (
-		colWidth  = 50
-		rowHeight = 30
-	)
-	rows := make([]layout.FlexChild, 0)
-	rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layoutTableCell(gtx, th, "No", colWidth, rowHeight, true)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layoutTableCell(gtx, th, "Name", colWidth, rowHeight, true)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layoutTableCell(gtx, th, "Type", colWidth, rowHeight, true)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layoutTableCell(gtx, th, "Size", colWidth, rowHeight, true)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layoutTableCell(gtx, th, "Serial", colWidth, rowHeight, true)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layoutTableCell(gtx, th, "Vendor", colWidth, rowHeight, true)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layoutTableCell(gtx, th, "Model", colWidth, rowHeight, true)
-			}),
-		)
-	}))
-
-	// 绘制表格行
-	for i, dev := range p.devices {
-		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layoutTableCell(gtx, th, strconv.Itoa(i+1), colWidth, rowHeight, i%2 == 0)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layoutTableCell(gtx, th, dev.Name, colWidth, rowHeight, i%2 == 0)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					devType := "HDD"
-					if !dev.Rota {
-						devType = "SSD"
-					}
-					return layoutTableCell(gtx, th, devType, colWidth, rowHeight, i%2 == 0)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layoutTableCell(gtx, th, strconv.Itoa(int(dev.Size)), colWidth, rowHeight, i%2 == 0)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layoutTableCell(gtx, th, dev.Serial, colWidth, rowHeight, i%2 == 0)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layoutTableCell(gtx, th, dev.Vendor, colWidth, rowHeight, i%2 == 0)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layoutTableCell(gtx, th, dev.Model, colWidth, rowHeight, i%2 == 0)
-				}),
-			)
-		}))
-	}
-	return fx.Layout(gtx, rows...)
-}
-
-func layoutTableCell(gtx layout.Context, th *material.Theme, text string, width, height unit.Dp, isHeader bool) layout.Dimensions {
-	// 设置单元格样式
-	lbl := material.Label(th, unit.Sp(16), text)
-	if isHeader {
-		lbl.Font.Weight = font.Bold
+	border := widget.Border{
+		Color: color.NRGBA{A: 255},
+		Width: unit.Dp(1),
 	}
 
-	// 绘制单元格背景
-	if !isHeader {
-		if gtx.Constraints.Min.Y%2 == 0 {
-			widget.Border{Color: th.Palette.Fg, Width: unit.Dp(0.5)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return layout.Dimensions{Size: gtx.Constraints.Min}
+	inset := layout.UniformInset(unit.Dp(2))
+
+	// Configure a label styled to be a heading.
+	headingLabel := material.Body1(th, "")
+	headingLabel.Font.Weight = font.Bold
+	headingLabel.Alignment = text.Middle
+	headingLabel.MaxLines = 1
+
+	// Configure a label styled to be a data element.
+	dataLabel := material.Body1(th, "")
+	dataLabel.MaxLines = 1
+
+	// Measure the height of a heading row.
+	orig := gtx.Constraints
+	gtx.Constraints.Min = image.Point{}
+	dims := inset.Layout(gtx, headingLabel.Layout)
+
+	gtx.Constraints = orig
+
+	tbl := component.Table(th, &component.GridState{}) // GridState 管理状态
+	return tbl.Layout(gtx, len(p.devices), len(headingText),
+		func(axis layout.Axis, index, constraint int) int {
+			switch axis {
+			case layout.Horizontal:
+				switch index {
+				case 0:
+					return 100
+				case 4:
+					return 300
+				default:
+					return 200
+				}
+			default:
+				return dims.Size.Y
+			}
+		},
+		func(gtx layout.Context, col int) layout.Dimensions { // 表头函数
+			return border.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					headingLabel.Text = headingText[col]
+					return headingLabel.Layout(gtx)
+				})
 			})
-		}
-	}
-
-	// 绘制文本
-	return layout.UniformInset(unit.Dp(5)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		gtx.Constraints.Min.X = gtx.Dp(width)
-		gtx.Constraints.Min.Y = gtx.Dp(height)
-		return lbl.Layout(gtx)
-	})
+		},
+		func(gtx layout.Context, row, col int) layout.Dimensions { // 单元格函数
+			return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				switch col {
+				case 0:
+					dataLabel.Text = strconv.Itoa(row + 1)
+					dataLabel.Alignment = text.Middle
+				case 1:
+					dataLabel.Text = p.devices[row].Name
+					dataLabel.Alignment = text.Middle
+				case 2:
+					if p.devices[row].Rota {
+						dataLabel.Text = "HDD"
+					} else {
+						dataLabel.Text = "SSD"
+					}
+					dataLabel.Alignment = text.Middle
+				case 3:
+					dataLabel.Text = strconv.Itoa(int(p.devices[row].Size / 1024 / 1024 / 1024))
+					dataLabel.Alignment = text.End
+				case 4:
+					dataLabel.Text = p.devices[row].Serial
+					dataLabel.Alignment = text.Middle
+				case 5:
+					dataLabel.Text = p.devices[row].Vendor
+					dataLabel.Alignment = text.Middle
+				case 6:
+					dataLabel.Text = p.devices[row].Model
+					dataLabel.Alignment = text.Middle
+				}
+				return dataLabel.Layout(gtx)
+			})
+		},
+	)
 }

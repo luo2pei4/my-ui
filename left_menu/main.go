@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"left_menu/component/icon"
 	"log"
 	"os"
@@ -41,12 +42,8 @@ func newFramePage() *FramePage {
 	p.appBar.NavigationIcon = icon.MenuIcon
 
 	// 添加目录
-	p.ModalNavDrawer.AddNavItem(component.NavItem{Name: "Home", Icon: icon.HomeIcon})
-	p.ModalNavDrawer.AddNavItem(component.NavItem{Name: "About", Icon: icon.OtherIcon})
-	p.ModalNavDrawer.AddNavItem(component.NavItem{Name: "About", Icon: icon.OtherIcon})
-	p.ModalNavDrawer.AddNavItem(component.NavItem{Name: "About", Icon: icon.OtherIcon})
-	p.ModalNavDrawer.AddNavItem(component.NavItem{Name: "About", Icon: icon.OtherIcon})
-
+	p.ModalNavDrawer.AddNavItem(component.NavItem{Name: "Home", Icon: icon.HomeIcon, Tag: "home"})
+	p.ModalNavDrawer.AddNavItem(component.NavItem{Name: "About", Icon: icon.OtherIcon, Tag: "about"})
 	return p
 }
 
@@ -66,6 +63,9 @@ func (p *FramePage) Layout(gtx layout.Context) layout.Dimensions {
 				p.NavAnim.Disappear(gtx.Now)
 			}
 		}
+	}
+	if p.ModalNavDrawer.NavDestinationChanged() {
+		fmt.Printf("nav item tag: %v\n", p.ModalNavDrawer.CurrentNavDestination())
 	}
 	return layout.Flex{
 		Axis: layout.Vertical,
