@@ -5,6 +5,7 @@ import (
 	"os"
 
 	page "tools/pages"
+	disktable "tools/pages/disk_table"
 	"tools/pages/home"
 	listdisks "tools/pages/list_disks.go"
 	remotessh "tools/pages/remote_ssh"
@@ -37,6 +38,7 @@ func loop(win *app.Window) error {
 	router.Register("home", home.New(&router))
 	router.Register("remote", remotessh.New(&router))
 	router.Register("disks", listdisks.New(&router))
+	router.Register("table", disktable.New(&router))
 
 	for {
 		switch e := win.Event().(type) {
