@@ -6,6 +6,7 @@ import (
 
 	page "tools/pages"
 	"tools/pages/home"
+	listdisks "tools/pages/list_disks.go"
 	remotessh "tools/pages/remote_ssh"
 
 	"gioui.org/app"
@@ -35,6 +36,7 @@ func loop(win *app.Window) error {
 	router := page.NewRouter()
 	router.Register("home", home.New(&router))
 	router.Register("remote", remotessh.New(&router))
+	router.Register("disks", listdisks.New(&router))
 
 	for {
 		switch e := win.Event().(type) {
